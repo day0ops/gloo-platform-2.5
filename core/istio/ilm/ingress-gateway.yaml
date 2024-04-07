@@ -1,0 +1,112 @@
+apiVersion: admin.gloo.solo.io/v2
+kind: GatewayLifecycleManager
+metadata:
+  name: istio-ingressgateway
+  namespace: gloo-mesh
+spec:
+  installations:
+    - gatewayRevision: $REVISION
+      clusters:
+        - name: $WEST_MESH_NAME
+          activeGateway: true
+      istioOperatorSpec:
+        # No control plane components are installed
+        profile: empty
+        # Solo.io Istio distribution repository; required for Gloo Istio.
+        # You get the repo key from your Solo Account Representative.
+        hub: $ISTIO_SOLO_REPO
+        # The Solo.io Gloo Istio tag
+        tag: $ISTIO_SOLO_VERSION
+        components:
+          ingressGateways:
+          # Enable the default ingress gateway
+            - name: istio-ingressgateway
+              # Deployed to gloo-mesh-gateways by default
+              namespace: istio-ingress
+              enabled: true
+              label:
+                # Set a unique label for the gateway. This is required to
+                # ensure Gateways can select this workload
+                app: istio-ingressgateway
+                istio: ingressgateway
+              k8s:
+                service:
+                  type: LoadBalancer
+                  selector:
+                    istio: ingressgateway
+                  # Default ports
+                  ports:
+                    # Port for health checks on path /healthz/ready.
+                    # For AWS ELBs, this port must be listed first.
+                    - name: tcp-status-port
+                      port: 15021
+                      targetPort: 15021
+                    # Main HTTP ingress port
+                    - name: http2
+                      port: 80
+                      targetPort: 8080
+                    # Main HTTPS ingress port
+                    - name: https
+                      port: 443
+                      targetPort: 8443
+                serviceAnnotations:
+                  service.beta.kubernetes.io/aws-load-balancer-type: external
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                  service.beta.kubernetes.io/aws-load-balancer-ip-address-type: ${WEST_NLB_LB_ADDRESS_TYPE}
+                  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /healthz/ready
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "15021"
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: http
+                  external-dns.alpha.kubernetes.io/hostname: apps.${DOMAIN_NAME}
+    - gatewayRevision: $REVISION
+      clusters:
+        - name: $EAST_MESH_NAME
+          activeGateway: true
+      istioOperatorSpec:
+        # No control plane components are installed
+        profile: empty
+        # Solo.io Istio distribution repository; required for Gloo Istio.
+        # You get the repo key from your Solo Account Representative.
+        hub: $ISTIO_SOLO_REPO
+        # The Solo.io Gloo Istio tag
+        tag: $ISTIO_SOLO_VERSION
+        components:
+          ingressGateways:
+          # Enable the default ingress gateway
+            - name: istio-ingressgateway
+              # Deployed to gloo-mesh-gateways by default
+              namespace: istio-ingress
+              enabled: true
+              label:
+                # Set a unique label for the gateway. This is required to
+                # ensure Gateways can select this workload
+                app: istio-ingressgateway
+                istio: ingressgateway
+              k8s:
+                service:
+                  type: LoadBalancer
+                  selector:
+                    istio: ingressgateway
+                  # Default ports
+                  ports:
+                    # Port for health checks on path /healthz/ready.
+                    # For AWS ELBs, this port must be listed first.
+                    - name: tcp-status-port
+                      port: 15021
+                      targetPort: 15021
+                    # Main HTTP ingress port
+                    - name: http2
+                      port: 80
+                      targetPort: 8080
+                    # Main HTTPS ingress port
+                    - name: https
+                      port: 443
+                      targetPort: 8443
+                serviceAnnotations:
+                  service.beta.kubernetes.io/aws-load-balancer-type: external
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                  service.beta.kubernetes.io/aws-load-balancer-ip-address-type: ${EAST_NLB_LB_ADDRESS_TYPE}
+                  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /healthz/ready
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "15021"
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: http

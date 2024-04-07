@@ -1,0 +1,34 @@
+replicaCount: 1
+
+global:
+  storageClass: gp2
+
+auth:
+  adminUser: admin
+  adminPassword: passwd00
+
+tls:
+  enabled: true
+  existingSecret: keycloak-tls
+  usePem: true
+
+postgresql:
+  enabled: true
+
+metrics:
+  enabled: false
+
+extraEnvVars: 
+  - name: KEYCLOAK_PRODUCTION
+    value: "true"
+  - name: KEYCLOAK_LOG_LEVEL
+    value: DEBUG
+
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    service.beta.kubernetes.io/aws-load-balancer-ip-address-type: ${NLB_LB_ADDRESS_TYPE}
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    external-dns.alpha.kubernetes.io/hostname: keycloak.${DOMAIN_NAME}

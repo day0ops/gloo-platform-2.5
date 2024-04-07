@@ -1,0 +1,62 @@
+configs:
+  params:
+    server:
+      insecure: true
+# repoServer:
+#   initContainers:
+#     - name: download-tools
+#       image: olegstepura/glibc-envsubst:latest
+#       command: [sh, -c]
+#       args:
+#         - cp /usr/bin/envsubst /custom-tools/
+#       volumeMounts:
+#         - name: custom-tools
+#           mountPath: /custom-tools
+#   extraContainers:
+#     - name: envsubst-generator-plugin
+#       image: busybox
+#       command:
+#         - "/var/run/argocd/argocd-cmp-server"
+#         - "--loglevel"
+#         - "debug"
+#       securityContext:
+#         runAsNonRoot: true
+#         runAsUser: 999
+#       volumeMounts:
+#         - name: var-files
+#           mountPath: /var/run/argocd
+#         - name: plugins
+#           mountPath: /home/argocd/cmp-server/plugins
+#         # Remove this volumeMount if you've chosen to bake the config file into the sidecar image.
+#         - name: argocd-cmp-cm
+#           mountPath: /home/argocd/cmp-server/config/plugin.yaml
+#           subPath: envsubst-generator-plugin.yaml
+#         # Starting with v2.4, do NOT mount the same tmp volume as the repo-server container. The filesystem separation helps
+#         # mitigate path traversal attacks.
+#         - name: cmp-tmp
+#           mountPath: /tmp
+#         - name: custom-tools
+#           mountPath: /usr/local/bin/envsubst
+#           subPath: envsubst
+  # volumeMounts:
+  #   - name: custom-tools
+  #     mountPath: /usr/local/bin/envsubst
+  #     subPath: envsubst
+  # volumes:
+  #   - name: custom-tools
+  #     emptyDir: {}
+  #   - name: argocd-cmp-cm
+  #     configMap:
+  #       name: argocd-cmp-cm
+  #   - name: cmp-tmp
+  #     emptyDir: {}
+server:
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "external"
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+      external-dns.alpha.kubernetes.io/hostname: "argocd.${DOMAIN_NAME}"
+  ingress:
+    enabled: false

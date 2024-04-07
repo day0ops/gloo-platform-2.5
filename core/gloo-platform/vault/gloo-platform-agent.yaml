@@ -1,0 +1,485 @@
+# Configuration for the Gloo agent.
+glooAgent:
+  # Configuration for the Gloo agent.
+  enabled: true
+  # Enable verbose/debug logging.
+  verbose: false
+  # Container resource requirements. For more info, see the [Kubernetes documentation](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.26/#resourcerequirements-v1-core).
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  # Configuration for the istiod sidecar deployment.
+  istiodSidecar:
+    # Create the cluster role binding for the istiod sidecar. Set this value to 'true' only when using the [Vault integration](https://docs.solo.io/gloo-mesh-enterprise/latest/setup/prod/certs/istio/managed/setup-options/#vault).
+    createRoleBinding: true
+    # Object reference for the istiod service account.
+    istiodServiceAccount:
+      name: istiod
+      namespace: istio-system
+  # Configuration for securing relay communication between the workload agents and the management server.
+  relay:
+    # Address and port by which gloo-mesh-mgmt-server in the Gloo control plane can be accessed by the Gloo workload agents.
+    serverAddress: "${ENDPOINT_GLOO_PLATFORM_MGMT_PLANE}"
+    # SNI name in the authority/host header used to connect to relay forwarding server. Must match server certificate CommonName. Do not change the default value.
+    authority: gloo-mesh-mgmt-server.gloo-mesh
+    # Custom certs: Secret containing client TLS certs used to identify the Gloo agent to the management server. If you do not specify a clientTlssSecret, you must specify a tokenSecret and a rootTlsSecret.
+    clientTlsSecret:
+      name: relay-client-tls-secret
+    # The ratio of the client TLS certificate lifetime to when the management server starts the certificate rotation process.
+    clientTlsSecretRotationGracePeriodRatio: ""
+    # Secret containing a root TLS cert used to verify the management server cert. The secret can also optionally specify a 'tls.key', which is used to generate the agent client cert.
+    rootTlsSecret:
+      name: relay-root-tls-secret
+    # Secret containing a shared token for authenticating Gloo agents when they first communicate with the management server. A token secret is not needed with ACM certs.
+    tokenSecret:
+      # Key value of the data within the Kubernetes secret.
+      key: token
+      # Name of the Kubernetes secret.
+      name: relay-identity-token-secret
+      # Namespace of the Kubernetes secret.
+      namespace: ""
+
+# Configuration for the Gloo Platform Telemetry Collector. See the [OpenTelemetry Helm chart](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-collector/values.yaml) for the complete set of values.
+telemetryCollector:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 300Mi
+  config:
+    exporters:
+      otlp:
+        endpoint: "${ENDPOINT_GLOO_PLATFORM_TELEMETRY_GATEWAY}"
+
+# Optional customization for the Gloo Platform Telemetry Collector.
+telemetryCollectorCustomization:
+  # OTel Collector service excluding the field internalTrafficPolicy, compatible with k8s < 1.26
+  compatibleService: false
+  # Deprecated in favor of the pipelines field, which allows selectively enabling or customizing pipelines. Disables the default metrics/ui pipeline.
+  disableDefaultPipeline: false
+  # Enable scraping of network information from the compute instance that the collector agent runs on.
+  enableCloudMetadataProcessing: false
+  # Configuration for extra exporters, such as to forward your data to a third-party provider. Exporters can forward the data to a destination on the local or remote network.
+  extraExporters:
+    # An exporter to forward data to Clickhouse.
+    clickhouse:
+      database: default
+      endpoint: tcp://clickhouse.gloo-mesh.svc:9000?dial_timeout=10s&compress=lz4
+      logs_table_name: gloo_api_logs
+      password: default
+      retry_on_failure:
+        enabled: true
+        initial_interval: 1s
+        max_elapsed_time: 5m
+        max_interval: 30s
+      timeout: 5s
+      ttl_days: 3
+      username: default
+    # An exporter to forward data to Prometheus.
+    prometheus:
+      endpoint: 0.0.0.0:9091
+    # An exporter to forward data to single-entry Redis streams.
+    redisstream/basic:
+      endpoint: gloo-mesh-redis.gloo-mesh.svc:6379
+      expire: 30m
+      max_entries: "1"
+      stream_attributes:
+        resource_attributes:
+          - cluster_name
+          - source
+    # An exporter to forward ui data to Redis streams.
+    redisstream/ui:
+      endpoint: gloo-mesh-redis.gloo-mesh.svc:6379
+      expire: 30m
+      stream_attributes:
+        resource_attributes:
+          - cluster_name
+          - source
+          - component
+          - k8s.pod.name
+          - k8s.container.name
+  # Specify any added receivers, processors, or exporters in an extra pipeline.
+  extraPipelines: null
+  # Configuration for extra processors to drop and generate new data. Processors transform data before it is forwarded to downstream processors and/or exporters. For more information, see the [OTel documentation](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor).
+  extraProcessors:
+    # The batch processor accepts spans, metrics, or logs and places them into batches. For more information, see [Batch Processor](https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/batchprocessor/README.md).
+    batch:
+      send_batch_max_size: 3000
+      send_batch_size: 2000
+      timeout: 600ms
+    # The batch log processor accepts logs and places them into batches. For more information, see [Batch Processor](https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/batchprocessor/README.md).
+    batch/logs:
+      # The maximum number of traces or metrics to include in a batch.
+      send_batch_size: 100
+      # The maximum amount of time to wait for a batch to be filled before sending it anyway.
+      timeout: 5s
+    # The memory limiter processor is used to prevent out of memory situations on the collector. For more information, see [Memory Limiter Processor](https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/memorylimiterprocessor/README.md).
+    memory_limiter:
+      check_interval: 1s
+      limit_percentage: 85
+      spike_limit_percentage: 10
+  # Configuration for extra receivers, such as to scrape extra Prometheus targets. Receivers listen on a network port to receive telemetry data.
+  extraReceivers:
+    # This file log receives tails and parses kubernetes access logs of istio-proxy containers. For more information, see [File Log Receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/filelogreceiver/README.md).
+    filelog/access_logs:
+      include:
+        - /var/log/pods/*/istio-proxy/*.log
+      include_file_name: false
+      include_file_path: true
+      operators:
+        - expr: body matches "^[^{}]*$"
+          type: filter
+        - id: get-format
+          routes:
+            - expr: body matches "^\\{"
+              output: parser-docker
+            - expr: body matches "^[^ Z]+ "
+              output: parser-crio
+            - expr: body matches "^[^ Z]+Z"
+              output: parser-containerd
+          type: router
+        - id: parser-crio
+          output: extract_metadata_from_filepath
+          regex: ^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$
+          type: regex_parser
+        - id: parser-containerd
+          output: extract_metadata_from_filepath
+          regex: ^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$
+          type: regex_parser
+        - id: parser-docker
+          output: extract_metadata_from_filepath
+          type: json_parser
+        - cache:
+            size: 128
+          id: extract_metadata_from_filepath
+          output: log_parser
+          parse_from: attributes["log.file.path"]
+          regex: ^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]{36})\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$
+          type: regex_parser
+        - id: log_parser
+          parse_from: attributes.log
+          timestamp:
+            layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+            parse_from: attributes.timestamp
+          type: json_parser
+        - expr: attributes["api_id"] matches "^$"
+          type: filter
+        - from: attributes.stream
+          to: attributes["log.iostream"]
+          type: move
+        - from: attributes.container_name
+          to: resource["k8s.container.name"]
+          type: move
+        - from: attributes.namespace
+          to: resource["k8s.namespace.name"]
+          type: move
+        - from: attributes.pod_name
+          to: resource["k8s.pod.name"]
+          type: move
+        - from: attributes.restart_count
+          to: resource["k8s.container.restart_count"]
+          type: move
+        - from: attributes.uid
+          to: resource["k8s.pod.uid"]
+          type: move
+        - field: body
+          type: remove
+        - field: attributes.log
+          type: remove
+    # This file log receives tails and parses cilium component logs. For more information, see [File Log Receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/filelogreceiver/README.md).
+    filelog/cilium:
+      include:
+        - /var/log/pods/*_cilium-*/*/*.log
+      include_file_name: false
+      include_file_path: true
+      operators:
+        - cache:
+            size: 128
+          id: extract_metadata_from_filepath
+          parse_from: attributes["log.file.path"]
+          regex: (?:(.*\/pods\/)(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)(?:[^\/]+\/)(?P<container_name>[^\/]+)\/)
+          type: regex_parser
+        - from: attributes.namespace
+          to: resource["k8s.namespace.name"]
+          type: move
+        - from: attributes.pod_name
+          to: resource["k8s.pod.name"]
+          type: move
+        - from: attributes.container_name
+          to: resource["k8s.container.name"]
+          type: move
+        - cache:
+            size: 128
+          id: extract_component_from_pod_name
+          parse_from: resource["k8s.pod.name"]
+          regex: ^(?P<component_name>cilium(?:-operator)?)
+          type: regex_parser
+        - from: attributes.component_name
+          to: resource["component"]
+          type: move
+    # This file log receives tails and parses gloo component logs. For more information, see [File Log Receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/filelogreceiver/README.md).
+    filelog/gloo_components:
+      include:
+        - /var/log/pods/*_gloo-*/*/*.log
+      include_file_name: false
+      include_file_path: true
+      operators:
+        - cache:
+            size: 128
+          id: extract_metadata_from_filepath
+          parse_from: attributes["log.file.path"]
+          regex: ^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]{36})\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$
+          type: regex_parser
+        - from: attributes.namespace
+          to: resource["k8s.namespace.name"]
+          type: move
+        - from: attributes.pod_name
+          to: resource["k8s.pod.name"]
+          type: move
+        - from: attributes.container_name
+          to: resource["k8s.container.name"]
+          type: move
+        - field: resource["component"]
+          if: resource["k8s.pod.name"] contains "gloo-mesh-agent"
+          type: add
+          value: gloo-mesh-agent
+        - field: resource["component"]
+          if: resource["k8s.pod.name"] contains "gloo-mesh-mgmt-server"
+          type: add
+          value: gloo-mesh-mgmt-server
+        - field: resource["component"]
+          if: resource["k8s.pod.name"] contains "gloo-mesh-ui"
+          type: add
+          value: gloo-mesh-ui
+        - field: resource["component"]
+          if: resource["k8s.pod.name"] contains "gloo-mesh-redis"
+          type: add
+          value: gloo-mesh-redis
+        - field: resource["component"]
+          if: resource["k8s.pod.name"] contains "gloo-telemetry-collector-agent"
+          type: add
+          value: gloo-telemetry-collector-agent
+        - field: resource["component"]
+          if: resource["k8s.pod.name"] contains "gloo-telemetry-gateway"
+          type: add
+          value: gloo-telemetry-gateway
+    # This file log receives tails and parses istiod logs. For more information, see [File Log Receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/filelogreceiver/README.md).
+    filelog/istiod:
+      include:
+        - /var/log/pods/*_istiod-*/*/*.log
+      include_file_name: false
+      include_file_path: true
+      operators:
+        - cache:
+            size: 128
+          id: extract_metadata_from_filepath
+          parse_from: attributes["log.file.path"]
+          regex: ^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]{36})\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$
+          type: regex_parser
+        - from: attributes.namespace
+          to: resource["k8s.namespace.name"]
+          type: move
+        - from: attributes.pod_name
+          to: resource["k8s.pod.name"]
+          type: move
+        - from: attributes.container_name
+          to: resource["k8s.container.name"]
+          type: move
+        - cache:
+            size: 128
+          id: extract_component_from_pod_name
+          parse_from: resource["k8s.pod.name"]
+          regex: ^(?P<component_name>.*)-[0-9a-zA-Z]{1,10}-[0-9a-zA-Z]*$
+          type: regex_parser
+        - from: attributes.component_name
+          to: resource["component"]
+          type: move
+  # Selectively enable, disable, or customize any of the default pipelines.
+  pipelines:
+    # Used to receive istio analyzer logs for Gloo Mesh Core Observability.
+    logs/analyzer:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: true
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - redisstream/basic
+        # List of processors to use in the pipeline.
+        processors:
+          - resource/cluster_context
+          - batch/logs
+        # List of receivers to use in the pipeline.
+        receivers:
+          - otlp
+    # Configure the collection of cilium flows.
+    logs/cilium_flows:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: false
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - redisstream/basic
+        # List of processors to use in the pipeline.
+        processors:
+          - resource/hubble_source_context
+          - resource/cluster_context
+          - batch/logs
+        # List of receivers to use in the pipeline.
+        receivers:
+          - hubble
+    # A pre-defined pipeline that collects Istio access logs for Gloo Portal.
+    logs/portal:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: false
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - clickhouse
+        # List of processors to use in the pipeline.
+        processors:
+          - resource/portal_source_context
+          - batch/logs
+        # List of receivers to use in the pipeline.
+        receivers:
+          - filelog/access_logs
+    # Used to receive component logs for Gloo Mesh Core Observability.
+    logs/ui:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: true
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - redisstream/ui
+        # List of processors to use in the pipeline.
+        processors:
+          - resource/cluster_context
+          - resource/ui_source_context
+          - batch/logs
+        # List of receivers to use in the pipeline.
+        receivers:
+          - filelog/gloo_components
+          - filelog/istiod
+          - filelog/cilium
+    # The metrics pipeline collects extra cilium metrics and is exportable for use in custom pipelines such as Grafana.
+    metrics/cilium:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: false
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - prometheus
+        # List of processors to use in the pipeline.
+        processors:
+          - memory_limiter
+          - transform/keep_hubble_labels
+          - transform/keep_cilium_labels
+          - transform/keep_ebpf_solo_io_labels
+          - batch
+        # List of receivers to use in the pipeline.
+        receivers:
+          - prometheus
+    # A pre-defined pipeline that allows otlp telemetry from other collectors to be relayed to the otel gateway. This pipeline is disabled by default
+    metrics/otlp_relay:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: false
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - otlp
+        # List of receivers to use in the pipeline.
+        receivers:
+          - otlp
+    # The metrics/ui pipeline collects the metrics that are required for the Gloo UI graph. This pipeline is enabled by default.
+    metrics/ui:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: true
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - prometheus
+        # List of processors to use in the pipeline.
+        processors:
+          - memory_limiter
+          - filter/min
+          - transform/keep_istio_labels
+          - transform/keep_otelcol_labels
+          - gloo_metrics_processor
+          - batch
+        # List of receivers to use in the pipeline.
+        receivers:
+          - prometheus
+    # A pre-defined pipeline that collects traces to observe and monitor requests.
+    traces/istio:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: false
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters when installed in workload cluster.
+        exporters:
+          - otlp
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - otlp/jaeger
+        # List of processors to use in the pipeline.
+        processors:
+          - batch
+        # List of receivers to use in the pipeline.
+        receivers:
+          - jaeger
+          - opencensus
+          - otlp
+          - zipkin
+    # A pre-defined pipeline that collects traces to observe and monitor traffic requests, and makes them available to the built-in Jaeger tracing platform demo.
+    traces/jaeger:
+      # Determines whether the Gloo OTel pipeline is enabled or disabled.
+      enabled: false
+      # The configuration of the Gloo OTel pipeline.
+      pipeline:
+        # List of exporters used when installed in management plane.
+        managementPlaneExporters:
+          - otlp/jaeger
+        # List of processors to use in the pipeline.
+        processors:
+          - batch
+        # List of receivers to use in the pipeline.
+        receivers:
+          - otlp
+  # SNI and certificate subject alternative name used in the collector certificate.
+  serverName: gloo-telemetry-gateway.gloo-mesh
+  # Skip the verification of Gloo management server certificate.
+  skipVerify: false
+  # Configure the service telemetry (logs and metrics) as described in the [otel-collector docs](https://opentelemetry.io/docs/collector/configuration/#service).
+  telemetry:
+    logs:
+      encoding: json
+    metrics:
+      address: 0.0.0.0:8888

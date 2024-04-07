@@ -1,0 +1,120 @@
+apiVersion: admin.gloo.solo.io/v2
+kind: GatewayLifecycleManager
+metadata:
+  name: istio-eastwestgateway
+  namespace: gloo-mesh
+spec:
+  installations:
+    - gatewayRevision: $REVISION
+      clusters:
+        - name: $WEST_MESH_NAME
+          activeGateway: true
+      istioOperatorSpec:
+        # No control plane components are installed
+        profile: empty
+        # Solo.io Istio distribution repository; required for Gloo Istio.
+        # You get the repo key from your Solo Account Representative.
+        hub: $ISTIO_SOLO_REPO
+        # The Solo.io Gloo Istio tag
+        tag: $ISTIO_SOLO_VERSION
+        components:
+          ingressGateways:
+          # Enable the default east-west gateway
+            - name: istio-eastwestgateway
+              # Deployed to gloo-mesh-gateways by default
+              namespace: istio-eastwest
+              enabled: true
+              label:
+                # Set a unique label for the gateway. This is required to
+                # ensure Gateways can select this workload.
+                app: istio-eastwestgateway
+                istio: eastwestgateway
+              k8s:
+                env:
+                  # sni-dnat adds the clusters required for AUTO_PASSTHROUGH mode
+                  # Required by Gloo for east-west routing
+                  - name: ISTIO_META_ROUTER_MODE
+                    value: "sni-dnat"
+                service:
+                  type: LoadBalancer
+                  selector:
+                    istio: eastwestgateway
+                  # Default ports
+                  ports:
+                    # Port for health checks on path /healthz/ready.
+                    # For AWS ELBs, this port must be listed first.
+                    - name: tcp-status-port
+                      port: 15021
+                      targetPort: 15021
+                    # Port for multicluster mTLS passthrough
+                    # Required for Gloo east/west routing
+                    - name: tls
+                      # Gloo looks for this default name 'tls' on a gateway
+                      port: 15443
+                      targetPort: 15443
+                    # Required for VM onboarding discovery address
+                    - name: tcp-istiod
+                      port: 15012
+                      targetPort: 15012
+                serviceAnnotations:
+                  service.beta.kubernetes.io/aws-load-balancer-type: external
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                  service.beta.kubernetes.io/aws-load-balancer-ip-address-type: ${WEST_NLB_LB_ADDRESS_TYPE}
+                  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+
+    - gatewayRevision: $REVISION
+      clusters:
+        - name: $EAST_MESH_NAME
+          activeGateway: true
+      istioOperatorSpec:
+        # No control plane components are installed
+        profile: empty
+        # Solo.io Istio distribution repository; required for Gloo Istio.
+        # You get the repo key from your Solo Account Representative.
+        hub: $ISTIO_SOLO_REPO
+        # The Solo.io Gloo Istio version
+        tag: $ISTIO_SOLO_VERSION
+        components:
+          ingressGateways:
+          # Enable the default east-west gateway
+            - name: istio-eastwestgateway
+              # Deployed to gloo-mesh-gateways by default
+              namespace: istio-eastwest
+              enabled: true
+              label:
+                # Set a unique label for the gateway. This is required to
+                # ensure Gateways can select this workload.
+                app: istio-eastwestgateway
+                istio: eastwestgateway
+              k8s:
+                env:
+                  # sni-dnat adds the clusters required for AUTO_PASSTHROUGH mode
+                  # Required by Gloo for east-west routing
+                  - name: ISTIO_META_ROUTER_MODE
+                    value: "sni-dnat"
+                service:
+                  type: LoadBalancer
+                  selector:
+                    istio: eastwestgateway
+                  # Default ports
+                  ports:
+                    # Port for health checks on path /healthz/ready.
+                    # For AWS ELBs, this port must be listed first.
+                    - name: tcp-status-port
+                      port: 15021
+                      targetPort: 15021
+                    # Port for multicluster mTLS passthrough
+                    # Required for Gloo east/west routing
+                    - name: tls
+                      # Gloo looks for this default name 'tls' on a gateway
+                      port: 15443
+                      targetPort: 15443
+                    # Required for VM onboarding discovery address
+                    - name: tcp-istiod
+                      port: 15012
+                      targetPort: 15012
+                serviceAnnotations:
+                  service.beta.kubernetes.io/aws-load-balancer-type: external
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                  service.beta.kubernetes.io/aws-load-balancer-ip-address-type: ${EAST_NLB_LB_ADDRESS_TYPE}
+                  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip

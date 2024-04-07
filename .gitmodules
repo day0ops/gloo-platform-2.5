@@ -1,0 +1,6 @@
+[submodule "cloud-provisioner/terraform-cloud-provisioner"]
+	path = cloud-provisioner/terraform-cloud-provisioner
+	url = https://github.com/pseudonator/terraform-all-in-one-cloud-provisioner
+[submodule "cloud-provisioner/terraform-aws-ipv6"]
+	path = cloud-provisioner/terraform-aws-ipv6
+	url = https://github.com/pseudonator/terraform-aws-ipv6

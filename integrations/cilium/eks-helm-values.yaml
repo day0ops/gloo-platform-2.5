@@ -1,0 +1,220 @@
+debug:
+  # -- Enable debug logging
+  enabled: false
+  # -- Configure verbosity levels for debug logging
+  # This option is used to enable debug messages for operations related to such
+  # sub-system such as (e.g. kvstore, envoy, datapath or policy), and flow is
+  # for enabling debug messages emitted per request, message and connection.
+  # Multiple values can be set via a space-separated string (e.g. "datapath envoy").
+  #
+  # Applicable values:
+  # - flow
+  # - kvstore
+  # - envoy
+  # - datapath
+  # - policy
+  verbose: ~
+
+# -- Install the cilium agent resources.
+agent: true
+
+# -- Agent container name.
+name: cilium
+
+# -- Agent container image.
+image:
+  repository: ${CILIUM_SOLO_REPO}/cilium
+  tag: "v${CILIUM_VERSION}"
+  pullPolicy: IfNotPresent
+  useDigest: false
+
+# -- Affinity for cilium-agent.
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - topologyKey: kubernetes.io/hostname
+      labelSelector:
+        matchLabels:
+          k8s-app: cilium
+
+# -- Node selector for cilium-agent.
+nodeSelector:
+  kubernetes.io/os: linux
+
+# -- Node tolerations for agent scheduling to nodes with taints
+# ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+tolerations:
+- operator: Exists
+  # - key: "key"
+  #   operator: "Equal|Exists"
+  #   value: "value"
+  #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+
+# -- Cilium agent update strategy
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 2
+
+rbac:
+  # -- Enable creation of Resource-Based Access Control configuration.
+  create: true
+
+# -- Configure image pull secrets for pulling container images
+imagePullSecrets:
+
+# -- Configure termination grace period for cilium-agent DaemonSet.
+terminationGracePeriodSeconds: 1
+
+operator:
+  # -- Enable the cilium-operator component (required).
+  enabled: true
+  image:
+    repository: ${CILIUM_SOLO_REPO}/operator
+    tag: "v${CILIUM_VERSION}"
+    pullPolicy: IfNotPresent
+    useDigest: false
+
+  # -- Number of replicas to run for the cilium-operator deployment
+  replicas: 1
+
+  # -- cilium-operator update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 50%
+
+  # -- Affinity for cilium-operator
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            io.cilium/app: operator
+
+  # -- Pod topology spread constraints for cilium-operator
+  topologySpreadConstraints: []
+    # - maxSkew: 1
+    #   topologyKey: topology.kubernetes.io/zone
+    #   whenUnsatisfiable: DoNotSchedule
+
+  # -- Node labels for cilium-operator pod assignment
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  # -- Node tolerations for cilium-operator scheduling to nodes with taints
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+  tolerations:
+  - operator: Exists
+    # - key: "key"
+    #   operator: "Equal|Exists"
+    #   value: "value"
+    #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+
+hubble:
+  # -- Enable Hubble (true by default).
+  enabled: true
+  ui:
+    # -- Whether to enable the Hubble UI.
+    enabled: false
+  tls:
+    # -- Enable mutual TLS for listenAddress.
+    enabled: true
+  metrics:
+    enableOpenMetrics: true
+    enabled:
+      - dns:destinationContext=pod;sourceContext=pod
+      - drop:destinationContext=pod;sourceContext=pod
+      - tcp:destinationContext=pod;sourceContext=pod
+      - flow:destinationContext=pod;sourceContext=pod
+      - port-distribution:destinationContext=pod;sourceContext=pod
+      - httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction
+
+cni:
+  # -- Install the CNI configuration and binary files into the filesystem.
+  install: true
+  # -- Remove the CNI configuration and binary files on agent shutdown. Enable this
+  # if you're removing Cilium from the cluster. Disable this to prevent the CNI
+  # configuration file from being removed during agent upgrade, which can cause
+  # nodes to go unmanageable.
+  uninstall: true
+
+  # -- Configure chaining on top of other CNI plugins.
+  chainingMode: aws-cni
+
+  # -- Make Cilium take ownership over the `/etc/cni/net.d` directory on the
+  # node, renaming all non-Cilium CNI configurations to `*.cilium_bak`.
+  # This ensures no Pods can be scheduled using other CNI plugins during Cilium
+  # agent downtime.
+  exclusive: false
+
+# -- Enables masquerading of IPv4 traffic leaving the node from endpoints.
+enableIPv4Masquerade: false
+
+# -- Enables masquerading of IPv6 traffic leaving the node from endpoints.
+enableIPv6Masquerade: false
+
+# -- Enable native-routing mode or tunneling mode.
+routingMode: native
+
+endpointRoutes:
+  # -- Enable use of per endpoint routes instead of routing via
+  # the cilium_host interface.
+  enabled: true
+
+k8sNetworkPolicy:
+  # -- Enable support for K8s NetworkPolicy
+  enabled: true
+
+eni:
+  # -- Enable Elastic Network Interface (ENI) integration.
+  enabled: false
+
+# -- Define serviceAccount names for components.
+# @default -- Component's fully qualified name.
+serviceAccounts:
+  cilium:
+    create: true
+  operator:
+    create: true
+  nodeinit:
+    create: false
+  envoy:
+    create: false
+  etcd:
+    create: false
+  preflight:
+    create: false
+  relay:
+    create: true
+  ui:
+    create: false
+  clustermeshApiserver:
+    create: false
+  clustermeshcertgen:
+    create: false
+  hubblecertgen:
+    # May not require this
+    create: true
+
+# -- Configure prometheus metrics on the configured port at /metrics
+prometheus:
+  enabled: true
+  serviceMonitor:
+    # -- Enable service monitors.
+    # This requires the prometheus CRDs to be available (see https://github.com/prometheus-operator/prometheus-operator/blob/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml)
+    enabled: false
+
+preflight:
+  # -- Enable Cilium pre-flight resources (required for upgrade)
+  enabled: false
+
+nodeinit:
+  # -- Enable the node initialization DaemonSet
+  enabled: false
+
+# -- Configure the encapsulation configuration for communication between nodes.
+tunnel: disabled

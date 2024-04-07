@@ -1,0 +1,124 @@
+apiVersion: admin.gloo.solo.io/v2
+kind: IstioLifecycleManager
+metadata:
+  name: istiod-control-plane
+  namespace: gloo-mesh
+spec:
+  installations:
+      # The revision for this installation, such as 1-14
+    - revision: $REVISION
+      # List all workload clusters to install Istio into
+      clusters:
+        - name: $WEST_MESH_NAME
+          # If set to true, the spec for this revision is applied in the cluster
+          defaultRevision: true
+        - name: $EAST_MESH_NAME
+          defaultRevision: true
+      istioOperatorSpec:
+        # Only the control plane components are installed
+        # (https://istio.io/latest/docs/setup/additional-setup/config-profiles/)
+        profile: minimal
+        # Solo.io Istio distribution repository; required for Gloo Istio.
+        # You get the repo key from your Solo Account Representative.
+        hub: $ISTIO_SOLO_REPO
+        # Any Solo.io Gloo Istio tag
+        tag: $ISTIO_SOLO_VERSION
+        namespace: istio-system
+        # Mesh configuration
+        meshConfig:
+          # Enable access logging only if using.
+          accessLogFile: /dev/stdout
+          # Encoding for the proxy access log (TEXT or JSON). Default value is TEXT.
+          accessLogEncoding: JSON
+          accessLogFormat: |
+            '{
+                "start_time": "%START_TIME%",
+                "authority": "%REQ(:AUTHORITY)%",
+                "bytes_received": "%BYTES_RECEIVED%",
+                "bytes_sent": "%BYTES_SENT%",
+                "downstream_local_address": "%DOWNSTREAM_LOCAL_ADDRESS%",
+                "downstream_remote_address": "%DOWNSTREAM_REMOTE_ADDRESS%",
+                "duration": "%DURATION%",
+                "method": "%REQ(:METHOD)%",
+                "path": "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+                "protocol": "%PROTOCOL%",
+                "requested_server_name": "%REQUESTED_SERVER_NAME%",
+                "response_code": "%RESPONSE_CODE%",
+                "response_code_details": "%RESPONSE_CODE_DETAILS%",
+                "response_flags": "%RESPONSE_FLAGS%",
+                "route_name": "%ROUTE_NAME%",
+                "upstream_cluster": "%UPSTREAM_CLUSTER%",
+                "upstream_host": "%UPSTREAM_HOST%",
+                "upstream_local_address": "%UPSTREAM_LOCAL_ADDRESS%",
+                "upstream_service_time": "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+                "upstream_transport_failure_reason": "%UPSTREAM_TRANSPORT_FAILURE_REASON%",
+                "user_agent": "%REQ(USER-AGENT)%",
+                "x_forwarded_for": "%REQ(X-FORWARDED-FOR)%"
+            }'
+          # Enable metrics merging
+          enablePrometheusMerge: true
+          # Enable span tracing only if using.
+          enableTracing: true
+          defaultConfig:
+            # Wait for the istio-proxy to start before starting application pods
+            holdApplicationUntilProxyStarts: true
+            # Enable Gloo metrics service. Required for Gloo UI
+            envoyMetricsService:
+              address: gloo-mesh-agent.gloo-mesh:9977
+            # Enable Gloo accesslog service. Required for Gloo Access Logging
+            envoyAccessLogService:
+              address: gloo-mesh-agent.gloo-mesh:9977
+            proxyMetadata:
+              # Enable Istio agent to handle DNS requests for known hosts
+              # Unknown hosts are automatically resolved using upstream DNS servers
+              # in resolv.conf (for proxy-dns)
+              ISTIO_META_DNS_CAPTURE: "true"
+              # Enable automatic address allocation (for proxy-dns)
+              ISTIO_META_DNS_AUTO_ALLOCATE: "true"
+          # Set the default behavior of the sidecar for handling outbound traffic from the application.
+          outboundTrafficPolicy:
+            mode: REGISTRY_ONLY
+          # The administrative root namespace for Istio configuration
+          rootNamespace: istio-config
+        # Traffic management
+        components:
+          # Disable gateways deployments, which are deployed in separate resources
+          ingressGateways:
+            - name: istio-ingressgateway
+              enabled: false
+            - name: istio-eastwestgateway
+              enabled: false
+          egressGateways:
+            - name: istio-egressgateway
+              enabled: false
+          pilot:
+            # If needed to override pilot images
+            # hub: 
+            # tag:
+            k8s:
+              imagePullPolicy: Always
+              env:
+                # Disable selecting workload entries for local service routing.
+                # Required for Gloo VirtualDestinaton functionality.
+                - name: PILOT_ENABLE_K8S_SELECT_WORKLOAD_ENTRIES
+                  value: "false"
+                # Allow multiple trust domains (Required for Gloo Mesh east/west routing)
+                - name: PILOT_SKIP_VALIDATE_TRUST_DOMAIN
+                  value: "true"
+                # Reload cacerts when it changes
+                - name: AUTO_RELOAD_PLUGIN_CERTS
+                  value: "true"
+                # The delay added to config/registry events for debouncing, which delays the push 
+                # by at least this interval. If no change is detected within this period, 
+                # the push occurs. Otherwise, the delay continues until no changes are detected,
+                # up to a max of PILOT_DEBOUNCE_MAX.
+                - name: PILOT_DEBOUNCE_AFTER
+                  value: 300ms
+                # The maximum amount of time to wait for events while debouncing.
+                - name: PILOT_DEBOUNCE_MAX
+                  value: 10s
+                # The number of push requests that istiod runs concurrently.
+                - name: PILOT_PUSH_THROTTLE
+                  value: "1000"
+                - name: ISTIO_ENABLE_IPV4_OUTBOUND_LISTENER_FOR_IPV6_CLUSTERS
+                  value: "true"

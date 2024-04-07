@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: non-mesh-sleep
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: non-mesh-sleep
+  labels:
+    app: non-mesh-sleep
+    service: non-mesh-sleep
+spec:
+  ports:
+    - name: http
+      port: 80
+  selector:
+    app: non-mesh-sleep
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: non-mesh-sleep
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: non-mesh-sleep
+  template:
+    metadata:
+      labels:
+        app: non-mesh-sleep
+    spec:
+      terminationGracePeriodSeconds: 0
+      serviceAccountName: non-mesh-sleep
+      containers:
+        - name: sleep
+          image: curlimages/curl
+          command: ["/bin/sleep", "infinity"]
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: secret-volume
+              mountPath: /etc/sleep/tls
+      volumes:
+        - name: secret-volume
+          secret:
+            secretName: sleep-secret
+            optional: true
+---

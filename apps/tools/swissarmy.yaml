@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: swissarmy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swissarmy
+  labels:
+    app: swissarmy
+    service: swissarmy
+spec:
+  ports:
+    - name: http
+      port: 80
+  selector:
+    app: swissarmy
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swissarmy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swissarmy
+  template:
+    metadata:
+      labels:
+        app: swissarmy
+    spec:
+      terminationGracePeriodSeconds: 0
+      serviceAccountName: swissarmy
+      containers:
+        - name: swissarmy
+          image: wbitt/network-multitool
+          imagePullPolicy: IfNotPresent
+---

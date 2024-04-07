@@ -1,0 +1,178 @@
+apiVersion: admin.gloo.solo.io/v2
+kind: GatewayLifecycleManager
+metadata:
+  name: istio-egressgateway
+  namespace: gloo-mesh
+spec:
+  installations:
+      # The revision for this installation, such as 1-18-3
+    - gatewayRevision: $REVISION
+      # List all workload clusters to install Istio into
+      clusters:
+        - name: $WEST_MESH_NAME
+          # If set to true, the spec for this revision is applied in the cluster
+          activeGateway: true
+      istioOperatorSpec:
+        # No control plane components are installed
+        profile: empty
+        # Solo.io Istio distribution repository; required for Gloo Istio.
+        # You get the repo key from your Solo Account Representative.
+        hub: $ISTIO_SOLO_REPO
+        # The Solo.io Gloo Istio tag
+        tag: $ISTIO_SOLO_VERSION
+        meshConfig:
+          outboundTrafficPolicy:
+            mode: REGISTRY_ONLY
+            # enable accesslogs
+          accessLogFile: /dev/stdout
+          defaultConfig:
+            proxyMetadata:
+              # For known hosts, enable the Istio agent to handle DNS requests for any custom ServiceEntry, such as non-Kubernetes services.
+              # Unknown hosts are automatically resolved using upstream DNS servers in resolv.conf (for proxy-dns)
+              ISTIO_META_DNS_CAPTURE: "true"
+        components:
+          egressGateways:
+            # Enable the egress gateway
+            - name: istio-egressgateway
+              # Deployed to istio-egress by default
+              namespace: istio-egress
+              enabled: true
+              label:
+                # Set a unique label for the gateway. This is required to
+                # ensure Gateways can select this workload.
+                app: istio-egressgateway
+                istio: egressgateway
+                traffic: egress
+              k8s:
+                # affinity:
+                #    nodeAffinity:
+                #      requiredDuringSchedulingIgnoredDuringExecution:
+                #        nodeSelectorTerms:
+                #          - matchExpressions:
+                #              - key: kubernetes.io/arch
+                #                operator: In
+                #                values:
+                #                  - arm64
+                #                  - amd64
+                env:
+                  # 'sni-dnat' enables AUTO_PASSTHROUGH mode for east-west communication through the gateway.
+                  # The default value ('standard') does not set up a passthrough cluster.
+                  # Required for multi-cluster communication and to preserve SNI.
+                  - name: ISTIO_META_ROUTER_MODE
+                    value: "sni-dnat"
+                  - name: AUTO_RELOAD_PLUGIN_CERTS
+                    value: "true"
+                service:
+                  type: LoadBalancer
+                  selector:
+                    istio: egressgateway
+                  # Default ports
+                  ports:
+                    # Port for health checks on path /healthz/ready.
+                    # For AWS ELBs, this port must be listed first.
+                    - port: 15021
+                      targetPort: 15021
+                      name: status-port
+                    # Port for multicluster mTLS passthrough
+                    # Required for Gloo egress routing
+                    - name: tls
+                      # Gloo looks for this default name 'tls' on a gateway
+                      port: 15443
+                      targetPort: 15443
+                    - name: http
+                      port: 80
+                      targetPort: 8080
+                    # Required for Istio mutual TLS
+                    - name: https
+                      port: 443
+                      targetPort: 8443
+                serviceAnnotations:
+                  service.beta.kubernetes.io/aws-load-balancer-type: external
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                  service.beta.kubernetes.io/aws-load-balancer-ip-address-type: ${WEST_NLB_LB_ADDRESS_TYPE}
+                  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+      # The revision for this installation, such as 1-18-3
+    - gatewayRevision: $REVISION
+      # List all workload clusters to install Istio into
+      clusters:
+        - name: $EAST_MESH_NAME
+          activeGateway: true
+      istioOperatorSpec:
+        # No control plane components are installed
+        profile: empty
+        # Solo.io Istio distribution repository; required for Gloo Istio.
+        # You get the repo key from your Solo Account Representative.
+        hub: $ISTIO_SOLO_REPO
+        # The Solo.io Gloo Istio tag
+        tag: $ISTIO_SOLO_VERSION
+        meshConfig:
+          outboundTrafficPolicy:
+            mode: REGISTRY_ONLY
+            # enable accesslogs
+          accessLogFile: /dev/stdout
+          defaultConfig:
+            proxyMetadata:
+              # For known hosts, enable the Istio agent to handle DNS requests for any custom ServiceEntry, such as non-Kubernetes services.
+              # Unknown hosts are automatically resolved using upstream DNS servers in resolv.conf (for proxy-dns)
+              ISTIO_META_DNS_CAPTURE: "true"
+        components:
+          egressGateways:
+            # Enable the egress gateway
+            - name: istio-egressgateway
+              # Deployed to istio-egress by default
+              namespace: istio-egress
+              enabled: true
+              label:
+                # Set a unique label for the gateway. This is required to
+                # ensure Gateways can select this workload.
+                app: istio-egressgateway
+                istio: egressgateway
+                traffic: egress
+              k8s:
+                # affinity:
+                #    nodeAffinity:
+                #      requiredDuringSchedulingIgnoredDuringExecution:
+                #        nodeSelectorTerms:
+                #          - matchExpressions:
+                #              - key: kubernetes.io/arch
+                #                operator: In
+                #                values:
+                #                  - arm64
+                #                  - amd64
+                env:
+                  # 'sni-dnat' enables AUTO_PASSTHROUGH mode for east-west communication through the gateway.
+                  # The default value ('standard') does not set up a passthrough cluster.
+                  # Required for multi-cluster communication and to preserve SNI.
+                  - name: ISTIO_META_ROUTER_MODE
+                    value: "sni-dnat"
+                  - name: AUTO_RELOAD_PLUGIN_CERTS
+                    value: "true"
+                service:
+                  type: LoadBalancer
+                  selector:
+                    istio: egressgateway
+                  # Default ports
+                  ports:
+                    # Port for health checks on path /healthz/ready.
+                    # For AWS ELBs, this port must be listed first.
+                    - port: 15021
+                      targetPort: 15021
+                      name: status-port
+                    # Port for multicluster mTLS passthrough
+                    # Required for Gloo egress routing
+                    - name: tls
+                      # Gloo looks for this default name 'tls' on a gateway
+                      port: 15443
+                      targetPort: 15443
+                    - name: http
+                      port: 80
+                      targetPort: 8080
+                    # Required for Istio mutual TLS
+                    - name: https
+                      port: 443
+                      targetPort: 8443
+                serviceAnnotations:
+                  service.beta.kubernetes.io/aws-load-balancer-type: external
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                  service.beta.kubernetes.io/aws-load-balancer-ip-address-type: ${EAST_NLB_LB_ADDRESS_TYPE}
+                  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip

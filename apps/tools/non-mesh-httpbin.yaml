@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: non-mesh-httpbin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: non-mesh-httpbin
+  labels:
+    app: non-mesh-httpbin
+    service: non-mesh-httpbin
+spec:
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 80
+  selector:
+    app: non-mesh-httpbin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: non-mesh-httpbin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: non-mesh-httpbin
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: non-mesh-httpbin
+        version: v1
+    spec:
+      serviceAccountName: non-mesh-httpbin
+      containers:
+        - name: httpbin
+          image: docker.io/kong/httpbin
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
