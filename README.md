@@ -9,18 +9,25 @@ Demo of [Gloo Platform](https://docs.solo.io/gloo-mesh-enterprise) version `2.5`
     | Command   | Version |      Installation      |
     |:----------|:---------------|:-------------|
     | `helm` | latest | `brew install helm` |
-    | `istioctl` | `1.19.5` | `asdf install istioctl 1.19.5` |
-    | `meshctl` | `2.5.3` | `curl -sL https://run.solo.io/meshctl/install \| GLOO_MESH_VERSION=v2.5.3 sh -` |
+    | `istioctl` | `1.19.7` | `asdf install istioctl 1.19.7` |
+    | `meshctl` | `2.5.5` | `curl -sL https://run.solo.io/meshctl/install \| GLOO_MESH_VERSION=v2.5.5 sh -` |
     | Vault | latest | `brew tap hashicorp/tap && brew install hashicorp/tap/vault` |
     | `cfssl` | latest | `brew install cfssl` |
+
+2. Dependencies
+    These dependencies are used by the installers.
+
+    | Command   | Version |      Installation      |
+    |:----------|:---------------|:-------------|
     | `jq` | latest | `brew install jq` |
     | `kustomize` | latest | `brew install kustomize` |
     | `getopt` | latest | `brew install gnu-getopt` |
+    | `htmlq` | latest | `brew install htmlq` |
 
-2. Set up environment variables
+3. Set up environment variables
 
     ```
-    export GLOO_PLATFORM_VERSION="2.5.3"
+    export GLOO_PLATFORM_VERSION="2.5.5"
     export GLOO_PLATFORM_HELM_VERSION="v${GLOO_PLATFORM_VERSION}"
 
     export ISTIO_VERSION="1.19.7"
@@ -37,9 +44,10 @@ Demo of [Gloo Platform](https://docs.solo.io/gloo-mesh-enterprise) version `2.5`
     export ARGOCD_VERSION="5.55.0"
     export GITEA_VERSION="10.1.3"
     export KAFKA_VERSION="26.4.2"
+    export KEYCLOAK_VERSION="21.3.1"
     ```
 
-3. Provisioning the clusters
+4. Provisioning the clusters
 
     Use `run.sh prov` in either `cloud-provisioner/` projects or `local-provisioner/` to provision a set of clusters.
 
@@ -59,7 +67,7 @@ Deploy Gloo Platform and sub-components using Helm.
 |:----------|:-------------|:------|:------|
 | -c  | --cilium    |                                 Yes |     Install CNI (Currently in chain mode only)
 | -ca | --ca [one of: vault, vault-cm-only, pca] |    Yes |     Enable Vault integration (uses cert-manager for Relay & uses Root Trust Policy configuration for Istio)
-| -d  | --dns | Yes | In Addition, to core integrations (`-i` option) add DNS support
+| -d  | --dns |                                       Yes | In Addition, to core integrations (`-i` option) add DNS support
 | -g  | --gitops        |                             Yes |     In Addition, to core integrations (`-i` option) install GitOps integrations (such as ArgoCD, Gitea)
 | -i  | --integrations  |                             Yes |     Install core integrations (By default ALB & cert-manager will be deployed)
 | -idp| --idp | Yes | In Addition, to core integrations (`-i` option) install Keycloak
@@ -80,7 +88,9 @@ Perform a clean up of all the installed components.
 
 | Alias | Long option | Optional | Description |
 |:----------|:-------------|:------|:------|
-| -i  | --integrations    |                                 Yes |     Removes all the integration components
+| -c  | --crds            | Yes | Removes all the CRDs
+| -i  | --integrations    | Yes | Removes all the integration components
+| -h  | --help            | Yes | Display the help
 
 ### Clusters
 

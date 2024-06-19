@@ -19,7 +19,7 @@ spec:
         tag: $ISTIO_SOLO_VERSION
         components:
           ingressGateways:
-          # Enable the default ingress gateway
+            # Enable the default ingress gateway
             - name: istio-ingressgateway
               # Deployed to gloo-mesh-gateways by default
               namespace: istio-ingress
@@ -30,6 +30,11 @@ spec:
                 app: istio-ingressgateway
                 istio: ingressgateway
               k8s:
+                podAnnotations:
+                  # Add some delays for NLB de-registrations
+                  proxy.istio.io/config: |
+                    drainDuration: 180s
+                    terminationDrainDuration: 182s
                 service:
                   type: LoadBalancer
                   selector:
@@ -57,6 +62,10 @@ spec:
                   service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /healthz/ready
                   service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "15021"
                   service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: http
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "2"
+                  service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: deregistration_delay.timeout_seconds=30,deregistration_delay.connection_termination.enabled=true
+                  # Provision a DNS record
                   external-dns.alpha.kubernetes.io/hostname: apps.${DOMAIN_NAME}
     - gatewayRevision: $REVISION
       clusters:
@@ -83,6 +92,11 @@ spec:
                 app: istio-ingressgateway
                 istio: ingressgateway
               k8s:
+                podAnnotations:
+                  # Add some delays for NLB de-registrations
+                  proxy.istio.io/config: |
+                    drainDuration: 180s
+                    terminationDrainDuration: 182s
                 service:
                   type: LoadBalancer
                   selector:

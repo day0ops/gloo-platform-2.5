@@ -5,7 +5,6 @@
 # Description   : Provision a Gloo Platform environment
 # Author        : Kasun Talwatta
 # Email         : kasun.talwatta@solo.io
-# Version       : v0.1
 ###################################################################
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -383,14 +382,16 @@ help() {
     cat <<EOF
 usage: ./`basename $0`
 
--c  | --cilium                                      (Optional)      Install CNI in chain mode
--ca | --ca [one of: vault, vault-cm-only, pca]      (Optional)      Enable Vault integration (uses cert-manager for Relay & uses Root Trust Policy configuration for Istio)
--d  | --dns                                         (Optional)      Add DNS support
--g  | --gitops                                      (Optional)      Install GitOps integrations
--i  | --integrations                                (Optional)      Install core integrations
--idp| --idp                                         (Optional)      Integrates Keycloak
--l  | --lifecycle                                   (Optional)      Enable life cycle management of Istio and sub-components instead of installing with Helm
--h  | --help                                        Usage
+-c  | --cilium                                          (Optional)      Install CNI in chain mode
+-ca | --ca [one of: vault, vault-cm-only, pca, spire]   (Optional)      Enable Vault integration (uses cert-manager for Relay & uses Root Trust Policy configuration for Istio)
+-d  | --dns                                             (Optional)      Add DNS support
+-g  | --gitops                                          (Optional)      Install GitOps integrations
+-i  | --integrations                                    (Optional)      Install core integrations
+-idp| --idp                                             (Optional)      Integrates Keycloak
+-l  | --lifecycle                                       (Optional)      Enable life cycle management of Istio and sub-components instead of installing with Helm
+--ignore-gloo                                           (Optional)      Don't install Gloo Platform
+--ignore-istio                                          (Optional)      Don't install Istio
+-h  | --help                                            Usage
 EOF
 
     exit 1
@@ -409,11 +410,14 @@ should_deploy_integrations=false
 should_support_vault=false
 should_support_vault_cm_only=false
 should_support_pca=false
+should_support_spire=false
 should_use_ilm=false
 should_support_cilium=false
+dont_install_gloo=false
+dont_install_istio=false
 
 SHORT=c,ca:,d,g,i,idp,l,h
-LONG=auth,cilium,ca:,dns,gitops,idp,integrations,lifecycle,help
+LONG=auth,cilium,ca:,dns,gitops,idp,integrations,lifecycle,ignore-gloo,ignore-istio,help
 OPTS=$(getopt -q -a -n "install.sh" --options $SHORT --longoptions $LONG -- "$@")
 if [[ $? -ne 0 ]]; then
     echo -e "Unrecognized option provided, check help below\n"
@@ -437,6 +441,8 @@ while [ : ]; do
             should_support_vault_cm_only=true
         elif [[ "$ca_type" == "pca" ]]; then
             should_support_pca=true
+        elif [[ "$ca_type" == "spire" ]]; then
+            should_support_spire=true
         else
             echo "Unknown CA type: '$ca_type', only accepted values are one of: vault, vault-cm-only, pca"
             help
@@ -462,6 +468,14 @@ while [ : ]; do
         should_use_ilm=true
         shift
         ;;
+    --ignore-gloo)
+        dont_install_gloo=true
+        shift
+        ;;
+    --ignore-istio)
+        dont_install_istio=true
+        shift
+        ;;
     -h | --help)
         help
         ;;
@@ -472,7 +486,7 @@ while [ : ]; do
     esac
 done
 
-print_logo "fg-blue" "Gloo Platform $GLOO_PLATFORM_VERSION Demo 🖥"
+print_logo "fg-blue" "🖥  Gloo Platform $GLOO_PLATFORM_VERSION Demo 🖥"
 
 header="Deploying Gloo Platform"
 if [[ "$should_support_vault" == true ]]; then
@@ -483,7 +497,7 @@ fi
 if [[ "$should_support_pca" == true ]]; then
     header+=", with AWS PCA support (using cert-manager for both Istio & Relay)"
 fi
-if [[ "$should_use_ilm" == true ]]; then
+if [[ "$should_use_ilm" == true && "$dont_install_istio" != true ]]; then
     header+=", with ILM/GLM support"
 fi
 if [[ "$should_support_cilium" == true ]]; then
@@ -573,7 +587,7 @@ if [[ "$should_support_vault" == true || "$should_support_vault_cm_only" == true
     fi
 fi
 
-if [[ "$should_use_ilm" == false ]]; then
+if [[ "$should_use_ilm" == false && "$dont_install_istio" != true ]]; then
     install_istio
 fi
 
@@ -591,20 +605,24 @@ if [[ "$should_support_vault" == true || "$should_support_vault_cm_only" == true
     fi
 fi
 
-install_gloo_platform $MGMT_CLOUD_PROVIDER $should_support_vault
+if [[ "$dont_install_gloo" != true ]]; then
+    install_gloo_platform $MGMT_CLOUD_PROVIDER $should_support_vault
+fi
 
-if [[ "$should_use_ilm" == true ]]; then
+if [[ "$should_use_ilm" == true && "$dont_install_istio" != true && "$dont_install_gloo" != true ]]; then
     sleep 5
     install_istio_with_ilm
 fi
 
 sleep 10
 
-if [[ "$should_support_vault" == true ]]; then
+if [[ "$should_support_vault" == true && "$dont_install_istio" != true ]]; then
     update_install_with_vault_support
 else
-    # Federate with self service CA
-    configure_federation
+    if [[ "$dont_install_istio" != true ]]; then
+        # Federate with self service CA
+        configure_federation
+    fi
 fi
 
-print_logo "fg-blue" "Installation complete 🎉"
+print_color_info "🎉 Installation complete 🎉" "fg-green"

@@ -8,8 +8,8 @@
 # Version       : v0.1
 ###################################################################
 
-UTILITY_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-source $UTILITY_DIR/colors.sh
+_UTILITY_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+source $_UTILITY_DIR/colors.sh
 
 function print_logo() {
     local centered_header

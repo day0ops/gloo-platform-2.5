@@ -8,8 +8,8 @@
 # Version       : v0.1
 ###################################################################
 
-UTILITY_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-source $UTILITY_DIR/colors.sh
+_UTILITY_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+source $_UTILITY_DIR/colors.sh
 
 declare -A DEFAULT_LOGGER_STATE=([DEFAULT_LOG_LEVEL]=${LOG_LEVEL:-"WARNING"} [LOG_LEVEL]=${LOG_LEVEL:-"WARNING"} [DEFAULT_LOG_PREFIX]="1" [LOG_PREFIX]=${LOG_PREFIX:-"1"})
 if [ -z "${LOGGER_STATE+x}" ]; then
@@ -193,6 +193,10 @@ function __format_logger() {
         fi
         fmt_colored="$(echo -en "$(color "${ftitle_border}\n${formatted_ftitle}${ftitle_border}\n" "${color}")")"
         colored="${fmt_colored}"
+        ;;
+    9)
+        formatted=$(_trim "${message}")
+        colored=$(color "${formatted}" "${color}")
         ;;
     *)
         formatted=$(_trim "${prefix}\t${message}")

@@ -573,6 +573,7 @@ meshConfig:
         "route_name": "%ROUTE_NAME%",
         "upstream_cluster": "%UPSTREAM_CLUSTER%",
         "upstream_host": "%UPSTREAM_HOST%",
+        "upstream_protocol": "%UPSTREAM_PROTOCOL%",
         "upstream_local_address": "%UPSTREAM_LOCAL_ADDRESS%",
         "upstream_service_time": "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
         "upstream_transport_failure_reason": "%UPSTREAM_TRANSPORT_FAILURE_REASON%",
@@ -618,6 +619,12 @@ meshConfig:
       # Used for Gloo Mesh metrics aggregation. Required for Gloo Mesh UI.
       # Must match the trustDomain.
       GLOO_MESH_CLUSTER_NAME: ${CLUSTER_NAME}
+
+    proxyStatsMatcher:
+      inclusionRegexps:
+        - ".*outlier_detection.*"
+        - ".*upstream_rq_.*"
+        - ".*upstream_cx_.*"
 
 base:
   # For istioctl usage to disable istio config crds in base

@@ -44,6 +44,10 @@ glooMgmtServer:
     requests:
       cpu: 125m
       memory: 1Gi
+  # If set to true: In the event that Redis restarts and has its cache deleted, the Gloo management server halts translation. Translation does not resume until the agents in each workload cluster reconnect to the management server and the Redis cache is re-populated. Then, the management server resumes translation and provides an updated output snapshot back to the agents. Until translation resumes, the agents use the last provided output snapshot. This way, the agents only apply and modify your resources based on a complete translation context. The default setting is false.
+  safeMode: true
+  # The time in seconds to halt translation. During this time, the Gloo management server does not translate any input snapshots until the agents in each workload cluster connect and send their input snapshot are re-populated in the Redis cache. After this time expires, the Gloo management server resumes translation, even if input snapshots from some agents are missing in Redis. Note that this setting is ignored if safeMode is set to true. To disable the safeStartWindow option, set the time to '0' (zero). Keep in mind that if safeMode is also disabled (which is the default), the Gloo management server starts translation immediately after getting an input snapshot from an agent. The management server does not wait for other agents, which can lead to translation without the complete context across your workload clusters. The default value is 180 seconds.
+  safeStartWindow: 180
   # Configuration for certificates to secure server-agent relay communication. Required only for multicluster setups.
   relay:
     # To disable relay CA functionality, set to true. Set to true only when you supply your custom client certs to the agents for relay mTLS. The gloo-mesh-mgmt-server pod will not require a token secret or the signing cert secret. The agent pod will not require the token secret, but will fail without a client cert.
@@ -115,6 +119,8 @@ glooUi:
         redis:
           # Host at which the Redis instance is accessible. To use the default Redis deployment, specify 'redis.gloo-mesh.svc.cluster.local:6379'.
           host: ""
+    # Request timeout for external auth requests in seconds.
+    requestTimeout: 2
   # Enable TLS termination on UI.
   tls:
     # Mount directory which stores the TLS files. Defaults to '/etc/tls-certs'.
@@ -128,6 +134,16 @@ glooUi:
     # Name of the secret which holds the TLS certificate and key
     secretName: ""
 
+# Gloo Network configuration options.
+glooNetwork:
+  # Enable translation of Gloo policies into Cilium network policies in Gloo Mesh Enterprise.
+  enabled: false
+  # Values for the Gloo Network Agent DaemonSet.
+  agent:
+    # Install the Gloo Network-specific agent which collects additional metrics when Cilium is installed.
+    enabled: false
+
+# Prometheus
 prometheus:
   enabled: true
 
@@ -197,7 +213,16 @@ telemetryCollectorCustomization:
           - k8s.pod.name
           - k8s.container.name
   # Specify any added receivers, processors, or exporters in an extra pipeline.
-  extraPipelines: null
+  extraPipelines:
+    metrics/gloo-mesh-control-plane:
+      receivers:
+        - prometheus
+      processors:
+        - memory_limiter
+        - filter/gloo-mesh-control-plane
+        - batch
+      exporters:
+        - otlp
   # Configuration for extra processors to drop and generate new data. Processors transform data before it is forwarded to downstream processors and/or exporters. For more information, see the [OTel documentation](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor).
   extraProcessors:
     # The batch processor accepts spans, metrics, or logs and places them into batches. For more information, see [Batch Processor](https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/batchprocessor/README.md).
@@ -216,6 +241,15 @@ telemetryCollectorCustomization:
       check_interval: 1s
       limit_percentage: 85
       spike_limit_percentage: 10
+    filter/gloo-mesh-control-plane:
+      metrics:
+        include:
+          match_type: regexp
+          metric_names:
+            - gloo.*
+            - relay.*
+            - otelcol.*
+            - translation.*
   # Configuration for extra receivers, such as to scrape extra Prometheus targets. Receivers listen on a network port to receive telemetry data.
   extraReceivers:
     # This file log receives tails and parses kubernetes access logs of istio-proxy containers. For more information, see [File Log Receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/filelogreceiver/README.md).
@@ -260,7 +294,7 @@ telemetryCollectorCustomization:
             layout: '%Y-%m-%dT%H:%M:%S.%LZ'
             parse_from: attributes.timestamp
           type: json_parser
-        - expr: attributes["api_id"] matches "^$"
+        - expr: (attributes?.api_id ?? "") == ""
           type: filter
         - from: attributes.stream
           to: attributes["log.iostream"]

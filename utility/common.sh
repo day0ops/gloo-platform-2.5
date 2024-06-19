@@ -5,12 +5,12 @@
 # Description   : Common utilities
 # Author        : Kasun Talwatta
 # Email         : kasun.talwatta@solo.io
-# Version       : v0.1
+# Version       : v0.2
 ###################################################################
 
-UTILITY_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-source $UTILITY_DIR/logging.sh
-source $UTILITY_DIR/logo.sh
+_UTILITY_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+source $_UTILITY_DIR/logging.sh
+source $_UTILITY_DIR/logo.sh
 
 log_level info
 log_prefix 0
@@ -26,6 +26,10 @@ error() {
 
 print_info() {
     logger i "$1"
+}
+
+print_color_info() {
+    logger i:9 "$1" " " "$2"
 }
 
 debug() {
@@ -148,4 +152,69 @@ validate_cloud_region() {
         fi
     fi
     echo "0"
+}
+
+confirm_purge() {
+    if ! confirm "$1"; then
+        logger i "Ok, we are giving up on the clean up then, good bye ! ..."
+        exit 0
+    fi
+}
+
+confirm_purge_generic() {
+    confirm_purge "Are you sure you want to proceed with the purge of configuration artifacts ❓"
+}
+
+cmdline_arg_processor_help() {
+    local caller=$1
+    cat <<EOF
+usage: $caller
+
+-d  | --deploy      Deploy the artifacts
+-p  | --purge       Purge the artifacts
+-h  | --help        Usage
+EOF
+
+    exit 1
+}
+
+cmdline_arg_processor() {
+    local short=f,i,h
+    local long=deploy,purge,help
+    local opts=$(getopt -a -n "setup.sh" --options $short --longoptions $long -- "$@")
+    if [[ $? -ne 0 ]]; then
+        echo -e "Unrecognized option provided, check help below\n"
+        help
+    fi
+
+    eval set -- "$opts"
+
+    local opt=$1; shift 1
+    local source_name=$2; shift 1
+    local deploy_func=$2; shift 1
+    local purge_func=$2; shift 1
+
+    while :; do
+        case "$opt" in
+        -d | --deploy)
+            $deploy_func
+            break
+            ;;
+        -p | --purge)
+            $purge_func
+            break
+            ;;
+        -h | --help)
+            cmdline_arg_processor_help $source_name
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo "Unexpected option: $opt"
+            cmdline_arg_processor_help $source_name
+            ;;
+        esac
+    done
 }

@@ -129,10 +129,17 @@ purge_integration_services() {
 purge_platform_services() {
     print_info "Purging Gloo Platform services from all clusters"
 
-    # Istio
-    kubectl --context $MGMT_CONTEXT delete -f $DIR/core/istio/ilm/eastwest-gateway.yaml
+    kubectl --context $MGMT_CONTEXT scale --replicas=0 deploy/gloo-mesh-mgmt-server -n gloo-mesh
+    kubectl --context $MGMT_CONTEXT patch GatewayLifecycleManager istio-ingressgateway -n gloo-mesh -p '{"metadata":{"finalizers":null}}' --type=merge
     kubectl --context $MGMT_CONTEXT delete -f $DIR/core/istio/ilm/ingress-gateway.yaml
+    kubectl --context $MGMT_CONTEXT patch GatewayLifecycleManager istio-egressgateway -n gloo-mesh -p '{"metadata":{"finalizers":null}}' --type=merge
+    kubectl --context $MGMT_CONTEXT delete -f $DIR/core/istio/ilm/egress-gateway.yaml
+    kubectl --context $MGMT_CONTEXT patch GatewayLifecycleManager istio-eastwestgateway -n gloo-mesh -p '{"metadata":{"finalizers":null}}' --type=merge
+    kubectl --context $MGMT_CONTEXT delete -f $DIR/core/istio/ilm/eastwest-gateway.yaml
+    kubectl --context $MGMT_CONTEXT patch IstioLifecycleManager istiod-control-plane -n gloo-mesh -p '{"metadata":{"finalizers":null}}' --type=merge
     kubectl --context $MGMT_CONTEXT delete -f $DIR/core/istio/ilm/istiod.yaml
+    kubectl --context $MGMT_CONTEXT scale --replicas=1 deploy/gloo-mesh-mgmt-server -n gloo-mesh
+    # Istio
     sleep 10
     helm --kube-context $WEST_CONTEXT -n istio-system del istio-base
     helm --kube-context $WEST_CONTEXT -n istio-system del istiod
@@ -159,12 +166,30 @@ purge_platform_services() {
 
     kubectl --context $WEST_CONTEXT delete ns istio-eastwest istio-ingress istio-system istio-config
     kubectl --context $EAST_CONTEXT delete ns istio-eastwest istio-ingress istio-system istio-config
+
+    kubectl --context $WEST_CONTEXT delete mutatingwebhookconfiguration $(kubectl --context $WEST_CONTEXT get mutatingwebhookconfiguration -l app=sidecar-injector -o jsonpath='{.items[0].metadata.name}')
+    kubectl --context $EAST_CONTEXT delete mutatingwebhookconfiguration $(kubectl --context $EAST_CONTEXT get mutatingwebhookconfiguration -l app=sidecar-injector -o jsonpath='{.items[0].metadata.name}')
+    kubectl --context $WEST_CONTEXT delete validatingwebhookconfiguration $(kubectl --context $WEST_CONTEXT get validatingwebhookconfiguration -l app=istiod -o jsonpath='{.items[0].metadata.name}')
+    kubectl --context $EAST_CONTEXT delete validatingwebhookconfiguration $(kubectl --context $EAST_CONTEXT get validatingwebhookconfiguration -l app=istiod -o jsonpath='{.items[0].metadata.name}')
+}
+
+purge_crds() {
+    kubectl --context $1 get crd | grep $2 | awk '{print $1}' | xargs -I {} kubectl --context $1 delete crd {}
+}
+
+purge_all_istio_crds() {
+    print_info "Purging Gloo Platform and Istio CRDs from all clusters"
+
+    purge_crds $MGMT_CONTEXT istio
+    purge_crds $WEST_CONTEXT istio
+    purge_crds $EAST_CONTEXT istio
 }
 
 help() {
     cat <<EOF
 usage: ./`basename $0`
 
+-c | --crds           (Optional)     Clean the crds
 -i | --integrations   (Optional)     Clean up all integrations
 -h | --help                          Usage
 EOF
@@ -172,10 +197,11 @@ EOF
     exit 1
 }
 
+should_purge_crds=false
 should_purge_integrations=false
 
-SHORT=i,h
-LONG=integrations,help
+SHORT=c,i,h
+LONG=crds,integrations,help
 OPTS=$(getopt -q -a -n "uninstall.sh" --options $SHORT --longoptions $LONG -- "$@")
 if [[ $? -ne 0 ]]; then
     echo -e "Unrecognized option provided, check help below\n"
@@ -186,9 +212,13 @@ eval set -- "$OPTS"
 
 while [ : ]; do
     case "$1" in
+    -c | --crds)
+        should_purge_crds=true
+        shift
+        ;;
     -i | --integrations)
-        shift 1
         should_purge_integrations=true
+        shift
         ;;
     -h | --help)
         help
@@ -208,6 +238,12 @@ fi
 # First we remove all the Platform related services
 purge_platform_services
 
-if [ "$should_purge_integrations" == true ]; then
+if [[ "$should_purge_integrations" == true ]]; then
     purge_integration_services
 fi
+
+if [[ "$should_purge_crds" == true ]]; then
+    purge_all_istio_crds
+fi
+
+print_color_info "Uninstall successfully completed 🎉" "fg-green"
